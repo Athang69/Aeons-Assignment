@@ -4,10 +4,12 @@ const app=express()
 const jwt=require("jsonwebtoken")
 const bcrypt=require("bcrypt")
 const { z }=require("zod")
+const cors=require("cors")
+app.use(cors())
 app.use(express.json())
 const {UserModel,QuestionModel, attemptModel, QuizModel}=require("./db")
 
-// console.log(process.env.MONGO_URL)
+console.log(process.env.MONGO_URL)
 
 async function connect_DB(){
   const mongoose=require("mongoose");
@@ -239,7 +241,7 @@ app.delete("/quiz/:id",auth,quizOwner,async function(req,res){
     })
   }
 })
-
+//Unauthenticated route to get quiz details without correct answers
 app.get("/quiz/:id",async function(req,res){
   try{
     const quiz = await QuizModel.findById(req.params.id).select("-questions.correctOption")
