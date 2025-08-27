@@ -7,7 +7,7 @@ const { z }=require("zod")
 const cors=require("cors")
 app.use(cors())
 app.use(express.json())
-const {UserModel,QuestionModel, attemptModel, QuizModel}=require("../db")
+const {UserModel,QuestionModel, attemptModel, QuizModel}=require("./db")
 
 console.log(process.env.MONGO_URL)
 
