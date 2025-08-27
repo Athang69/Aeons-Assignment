@@ -1,10 +1,13 @@
-const express=require("express")
-const app=express();
-const jwt=require("jsonwebtoken");
-const bcrypt=require("bcrypt");
-const { z }=require("zod");
 require('dotenv').config()
-app.use(express.json());
+const express=require("express")
+const app=express()
+const jwt=require("jsonwebtoken")
+const bcrypt=require("bcrypt")
+const { z }=require("zod")
+app.use(express.json())
+const {UserModel,QuestionModel, attemptModel, QuizModel}=require("./db")
+
+// console.log(process.env.MONGO_URL)
 
 async function connect_DB(){
   const mongoose=require("mongoose");
@@ -12,9 +15,6 @@ async function connect_DB(){
   console.log("Connected to DB")
 }
 connect_DB();
-
-const {UserModel}=require("./db")
-
 
 function auth(req,res,next){
   try {
@@ -111,4 +111,105 @@ app.post("/signin",async function(req,res){
   }
 })
 
+app.get("/dashboard",auth,async function(req,res){
+  const user = await UserModel.findById(req.userId)
+  if(!user){
+    res.status(403).json({
+      message:"This user does not exist"
+    })
+  }
+  else{
+    res.json({
+      message:`Welcome to your dashboard, ${user.username}`
+    })
+  }
+})  
+
+app.post("/quiz/create",auth, async function(req,res){
+  try{
+    const {title, description, isPublic, questions}=req.body
+    const quiz = await QuizModel.create({
+      owner:req.userId,
+      title,
+      description,
+      isPublic,
+      questions
+    })
+    res.status(200).json(quiz)
+  }
+  catch(e){
+    res.status(400).json({
+      error:e.message
+    })
+  }
+})
+
+app.get("/quiz/:id",async function(req,res){
+  try{
+    const quiz = await QuizModel.findById(req.params.id).select("-questions.correctOption")
+    if(!quiz){
+      res.status(404).json({
+        message:"Quiz not found"
+      })
+      return
+    }
+    res.status(200).json(quiz)
+  }
+  catch(e){
+    res.status(404).json({
+      error:e.message
+    })
+  }
+})
+
+app.post("/quiz/:id/attempt",auth,async function(req,res){
+  try{
+    const quiz = await QuizModel.findById(req.params.id)
+    if(!quiz){
+      res.status(404).json({
+        message:"Quiz not found"
+      })
+      return
+    }
+
+    const {answers}=req.body
+    let score=0
+    let maxScore=0  
+    const evaluated=[]
+
+    quiz.questions.forEach(q => {
+      const ans=answers.find(a => a.questionId === String(q._id))
+      if (!ans){
+        return
+      }
+      const correct=ans.chosenIndex===q.correctOption
+      const points=correct?q.points:0
+      score+=points
+      maxScore+=q.points
+      evaluated.push({
+        questionId:q._id,
+        chosenIndex:ans.chosenIndex,
+        correct,
+        pointsAwarded:points
+      })
+    })
+    const attemp=await attemptModel.create({
+      quiz:quiz._id,
+      user:req.userId,
+      answers:evaluated,
+      score,
+      maxScore
+    }) 
+    res.status(200).json({
+      score:score,
+      maxScore:maxScore,
+      attempt:attemp
+    })
+  }
+  catch(e){
+    res.status(400).json({
+      error:e.message
+    })
+  }
+})
 app.listen(3000);
