@@ -119,10 +119,34 @@ app.get("/dashboard",auth,async function(req,res){
     })
   }
   else{
-    res.json({
-      message:`Welcome to your dashboard, ${user.username}`
+    try{
+      const quizzes = await QuizModel.find({owner:req.userId})
+      const attempts = await attemptModel.find({user:req.userId}).populate('quiz')
+      const dashboardData = quizzes.map(quiz => {
+        const quizAttempts = attempts.filter(attempt => String(attempt.quiz._id) === String(quiz._id))
+        const totalScore = quizAttempts.reduce((acc, attempt) => acc + attempt.score, 0)
+        const totalMaxScore = quizAttempts.reduce((acc, attempt) => acc + attempt.maxScore, 0)
+        return{
+          quizId: quiz._id,
+          title: quiz.title,
+          description: quiz.description,
+          owner: quiz.owner,
+          isPublic: quiz.isPublic,
+          questionCount: quiz.questions.length,
+          quizAttempts,
+          totalScore,
+          totalMaxScore
+        }
+      })
+      res.status(200).json({
+        dashboardData
+      })
+    }
+  catch(e){
+    res.status(404).json({
+      error:e.message
     })
-  }
+}}
 })  
 
 app.post("/quiz/create",auth, async function(req,res){
