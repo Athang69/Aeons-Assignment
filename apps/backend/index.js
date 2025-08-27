@@ -29,6 +29,31 @@ function auth(req,res,next){
   }
 }
 
+async function quizOwner(req,res,next){
+  const quiz = await QuizModel.findById(req.params.id)
+  try{
+    if(!quiz){
+      res.status(403).json({
+        message:"Quiz does not exist"
+      })
+      return
+    }
+    else{
+      if(String(quiz.owner)!==req.userId){
+        res.status(403).json({
+          message:"You are not the owner of this quiz"
+        })
+        return
+      }
+    }
+  }catch(e){
+    res.status(500).json({
+      message:"Internal server error",
+      error:e.message
+    })
+  }
+}
+
 app.post("/signup",async function(req,res){
   const requiredBody=z.object({
     email:z.string().min(5).max(50).email(),
@@ -120,12 +145,15 @@ app.get("/dashboard",auth,async function(req,res){
   }
   else{
     try{
-      const quizzes = await QuizModel.find({owner:req.userId})
-      const attempts = await attemptModel.find({user:req.userId}).populate('quiz')
+
+      const publicQuiz = await QuizModel.find({isPublic:true}).select("-questions.correctOption").lean()
+      const ownerQuiz = await QuizModel.find({owner:req.userId}).select("-questions.correctOption").lean()
+      const quizzes = [...publicQuiz,...ownerQuiz]
+      const attempts = await attemptModel.find({user:req.userId}).lean()
       const dashboardData = quizzes.map(quiz => {
-        const quizAttempts = attempts.filter(attempt => String(attempt.quiz._id) === String(quiz._id))
-        const totalScore = quizAttempts.reduce((acc, attempt) => acc + attempt.score, 0)
-        const totalMaxScore = quizAttempts.reduce((acc, attempt) => acc + attempt.maxScore, 0)
+      const quizAttempts = attempts.filter(attempt => String(attempt.quiz._id) === String(quiz._id))
+      const totalScore = quizAttempts.reduce((acc, attempt) => acc + attempt.score, 0)
+      const totalMaxScore = quizAttempts.reduce((acc, attempt) => acc + attempt.maxScore, 0)
         return{
           quizId: quiz._id,
           title: quiz.title,
@@ -162,6 +190,50 @@ app.post("/quiz/create",auth, async function(req,res){
     res.status(200).json(quiz)
   }
   catch(e){
+    res.status(400).json({
+      error:e.message
+    })
+  }
+})
+
+app.patch("/quiz/:id",auth,quizOwner,async function(req,res){
+  const {title, description, isPublic, questions}=req.body
+  try{
+    const quiz=await QuizModel.findByIdAndUpdate(req.params.id,{
+      title,
+      description,
+      isPublic,
+      questions
+    },{new:true})
+    if(!quiz){
+      res.status(404).json({
+        message:"Quiz not found"
+      })
+      return
+    }
+    res.status(200).json(quiz)
+  }catch(e){
+    res.status(400).json({
+      error:e.message
+    })
+  }
+})
+
+app.delete("/quiz/:id",auth,quizOwner,async function(req,res){
+  try{
+    const quiz=await QuizModel.findByIdAndDelete(req.params.id)
+    if(!quiz){
+      res.status(404).json({
+        message:"Quiz not found"
+      })
+      return
+    }
+    else{
+    res.status(200).json({
+      message:"Quiz deleted successfully"
+    })
+    }
+  }catch(e){
     res.status(400).json({
       error:e.message
     })
